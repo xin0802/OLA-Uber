@@ -5,7 +5,7 @@ import streamlit as st
 # ==============================
 # 基础配置
 # ==============================
-st.set_page_config(page_title="Ride-hailing Review Insights Dashboard", layout="wide")
+st.set_page_config(page_title="Review Insights Dashboard", layout="wide")
 
 # ==============================
 # 1) 数据源配置：把路径改成你的真实文件名/相对路径
@@ -57,7 +57,7 @@ def load_data(path: str, sheet: str):
     required = {"dimension", "period", "ai_summary", "ai_recommendations"}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"缺少必要列: {missing}. 你当前列为: {df.columns.tolist()}")
+        raise ValueError(f"Missing required columns: {missing}. Current columns: {df.columns.tolist()}")
 
     # 生成排序用时间 key
     df["period_sort"] = df["period"].apply(period_to_sortkey)
@@ -74,28 +74,28 @@ def load_data(path: str, sheet: str):
 # ==============================
 # 页面标题
 # ==============================
-st.title("Ride-hailing Reviews — Dimension × Time Insights (AI Summary & Recommendations)")
+st.title("Negative Reviews Analysis Dashboard")
 
 # ==============================
 # 侧边栏：选择查看模式
 # ==============================
-st.sidebar.header("查看设置")
+st.sidebar.header("View Settings")
 
 view_mode_global = st.sidebar.radio(
-    "查看模式",
+    "View Mode",
     [
-        "维度视角（单数据源）",
-        "时间视角（单数据源）",
-        "对比视角（Uber vs Ola）",  # ✅ 新增
+        "Dimension View (Single Source)",
+        "Time View (Single Source)",
+        "Comparison View (Uber vs Ola)",  # ✅ 新增
     ],
     index=0
 )
 
 # 全局关键词搜索（所有模式都适用）
-keyword = st.sidebar.text_input("关键词搜索（summary/reco/evidence）", value="").strip()
+keyword = st.sidebar.text_input("Keyword Search (summary / recommendations / evidence)", value="").strip()
 
 # 是否展示 Evidence（证据）
-show_evidence = st.sidebar.checkbox("显示 Evidence（证据评论）", value=True)
+show_evidence = st.sidebar.checkbox("Show Evidence (negative reviews)", value=True)
 
 # ==============================
 # 工具：关键词筛选
@@ -153,7 +153,7 @@ def render_compare_card(dimension: str, period: str, uber_row: pd.Series | None,
         with left:
             st.markdown("### Uber")
             if uber_row is None:
-                st.info("该时间段该维度无数据")
+                st.info("No data for this dimension in the selected period.")
             else:
                 st.markdown("**AI Summary**")
                 st.write(uber_row.get("ai_summary", "").strip() or "(empty)")
@@ -169,7 +169,7 @@ def render_compare_card(dimension: str, period: str, uber_row: pd.Series | None,
         with right:
             st.markdown("### Ola")
             if ola_row is None:
-                st.info("该时间段该维度无数据")
+                st.info("No data for this dimension in the selected period.")
             else:
                 st.markdown("**AI Summary**")
                 st.write(ola_row.get("ai_summary", "").strip() or "(empty)")
@@ -184,11 +184,11 @@ def render_compare_card(dimension: str, period: str, uber_row: pd.Series | None,
 # ==============================
 # 模式 A/B：单数据源模式，需要先选数据源并加载 df
 # ==============================
-if view_mode_global in ["维度视角（单数据源）", "时间视角（单数据源）"]:
-    st.sidebar.header("数据源选择（单数据源模式）")
+if view_mode_global in ["Dimension View (Single Source)", "Time View (Single Source)"]:
+    st.sidebar.header("Data Source (Single Source Mode)")
 
     source_name = st.sidebar.radio(
-        "选择数据集",
+        "Select Dataset",
         options=list(DATA_SOURCES.keys()),
         index=0,
         horizontal=False
@@ -200,22 +200,25 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
     try:
         df = load_data(excel_path, sheet_name)
     except Exception as e:
-        st.error(f"读取 {source_name} 数据失败：{e}")
+        st.error(f"Failed to load {source_name} data: {e}")
         st.stop()
 
-    st.caption(f"当前数据源：**{source_name}**")
+    st.caption(f"Current source: **{source_name}**")
 
     if df["period_sort"].isna().any():
-        st.warning("有部分 period 无法解析为时间（period_sort=NaT），排序可能不准确。请检查 period 格式（YYYYMM 或 YYYYQn）。")
+        st.warning(
+            "Some 'period' values could not be parsed into timestamps (period_sort=NaT). "
+            "Sorting may be inaccurate. Please ensure 'period' is in YYYYMM or YYYYQn format."
+        )
 
     # ==============================
     # 模式 A：维度视角（单数据源）
     # ==============================
-    if view_mode_global.startswith("维度视角"):
-        st.sidebar.header("维度视角筛选")
+    if view_mode_global.startswith("Dimension View"):
+        st.sidebar.header("Filters (Dimension View)")
 
         all_dims = sorted(df["dimension"].dropna().unique().tolist())
-        dim_selected = st.sidebar.selectbox("选择维度 (dimension)", options=["(All)"] + all_dims, index=0)
+        dim_selected = st.sidebar.selectbox("Select Dimension", options=["(All)"] + all_dims, index=0)
 
         # 时间范围（按 period_sort）
         df_valid_time = df.dropna(subset=["period_sort"]).copy()
@@ -223,7 +226,7 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
             min_t = df_valid_time["period_sort"].min()
             max_t = df_valid_time["period_sort"].max()
             time_range = st.sidebar.slider(
-                "选择时间范围（按 period 排序）",
+                "Select Time Range (based on parsed period)",
                 min_value=min_t.to_pydatetime(),
                 max_value=max_t.to_pydatetime(),
                 value=(min_t.to_pydatetime(), max_t.to_pydatetime()),
@@ -231,10 +234,10 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
             )
         else:
             time_range = None
-            st.sidebar.info("没有可解析的 period_sort，时间滑块不可用。")
+            st.sidebar.info("No parsable period_sort found. Time range slider is disabled.")
 
-        view_mode = st.sidebar.radio("展示形式", ["卡片（按时间排序）", "表格"], index=0)
-        page_size = st.sidebar.selectbox("卡片：每页条数", [10, 20, 50, 100], index=1)
+        view_mode = st.sidebar.radio("Display Format", ["Cards (sorted by time)", "Table"], index=0)
+        page_size = st.sidebar.selectbox("Cards: items per page", [10, 20, 50, 100], index=1)
 
         dff = df.copy()
 
@@ -252,16 +255,16 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
 
         # 顶部概览
         c1, c2, c3 = st.columns(3)
-        c1.metric("筛选后条目数", len(dff))
-        c2.metric("维度数", dff["dimension"].nunique())
-        c3.metric("时间段数", dff["period"].nunique())
+        c1.metric("Records (after filtering)", len(dff))
+        c2.metric("No. of Dimensions", dff["dimension"].nunique())
+        c3.metric("No. of Periods", dff["period"].nunique())
         st.divider()
 
         if dff.empty:
-            st.info("筛选结果为空。请调整维度/时间范围/关键词。")
+            st.info("No results. Please adjust filters (dimension / time range / keyword).")
             st.stop()
 
-        if view_mode.startswith("表格"):
+        if view_mode.startswith("Table"):
             show_cols = ["dimension", "period", "ai_summary", "ai_recommendations"]
             if "negative_reviews_concat" in dff.columns:
                 show_cols.append("negative_reviews_concat")
@@ -270,11 +273,11 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
         else:
             total = len(dff)
             page_count = (total + page_size - 1) // page_size
-            page = st.number_input("页码", min_value=1, max_value=page_count, value=1, step=1)
+            page = st.number_input("Page", min_value=1, max_value=page_count, value=1, step=1)
 
             start = (page - 1) * page_size
             end = min(start + page_size, total)
-            st.caption(f"显示第 {start+1} - {end} 条 / 共 {total} 条")
+            st.caption(f"Showing {start+1}–{end} of {total}")
 
             dff_page = dff.iloc[start:end]
             for _, row in dff_page.iterrows():
@@ -284,26 +287,28 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
     # 模式 B：时间视角（单数据源）
     # ==============================
     else:
-        st.sidebar.header("时间视角筛选")
+        st.sidebar.header("Filters (Time View)")
 
         tmp = df.dropna(subset=["period"]).copy()
         tmp["period_sort2"] = tmp["period"].apply(period_to_sortkey)
 
-        periods_df = (tmp[["period", "period_sort2"]]
-                      .drop_duplicates()
-                      .sort_values(["period_sort2", "period"], ascending=[True, True]))
+        periods_df = (
+            tmp[["period", "period_sort2"]]
+            .drop_duplicates()
+            .sort_values(["period_sort2", "period"], ascending=[True, True])
+        )
 
         period_list = periods_df["period"].tolist()
         if not period_list:
-            st.error("数据中没有可用的 period。")
+            st.error("No usable 'period' values found in the dataset.")
             st.stop()
 
-        period_selected = st.sidebar.selectbox("选择时间 (period)", options=period_list, index=len(period_list) - 1)
+        period_selected = st.sidebar.selectbox("Select Period", options=period_list, index=len(period_list) - 1)
 
         all_dims = sorted(df["dimension"].dropna().unique().tolist())
-        dims_selected = st.sidebar.multiselect("选择维度（默认全选）", options=all_dims, default=all_dims)
+        dims_selected = st.sidebar.multiselect("Select Dimensions (default: all)", options=all_dims, default=all_dims)
 
-        view_mode = st.sidebar.radio("展示形式", ["网格卡片（推荐）", "表格"], index=0)
+        view_mode = st.sidebar.radio("Display Format", ["Grid Cards (recommended)", "Table"], index=0)
 
         dff = df[df["period"] == period_selected].copy()
 
@@ -315,23 +320,23 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
 
         # 顶部概览
         c1, c2, c3 = st.columns(3)
-        c1.metric("当前 period", period_selected)
-        c2.metric("展示维度数", dff["dimension"].nunique())
-        c3.metric("条目数", len(dff))
+        c1.metric("Current period", period_selected)
+        c2.metric("Dimensions shown", dff["dimension"].nunique())
+        c3.metric("Records", len(dff))
         st.divider()
 
         if dff.empty:
-            st.info("该时间点筛选结果为空（可能该 period 没有某些维度，或关键词过滤后为空）。")
+            st.info("No results for this period after filtering (dimensions/keyword).")
             st.stop()
 
-        if view_mode.startswith("表格"):
+        if view_mode.startswith("Table"):
             show_cols = ["dimension", "period", "ai_summary", "ai_recommendations"]
             if "negative_reviews_concat" in dff.columns:
                 show_cols.append("negative_reviews_concat")
             st.dataframe(dff[show_cols], use_container_width=True, height=700)
 
         else:
-            cols_per_row = st.sidebar.selectbox("网格：每行卡片列数", [2, 3], index=0)
+            cols_per_row = st.sidebar.selectbox("Grid: cards per row", [2, 3], index=0)
             rows = dff.to_dict(orient="records")
 
             for i in range(0, len(rows), cols_per_row):
@@ -346,19 +351,19 @@ if view_mode_global in ["维度视角（单数据源）", "时间视角（单数
 # 模式 C：对比视角（Uber vs Ola）
 # ==============================
 else:
-    st.sidebar.header("对比视角设置（Uber vs Ola）")
+    st.sidebar.header("Comparison Settings (Uber vs Ola)")
 
     # 读取两份数据
     try:
         df_uber = load_data(DATA_SOURCES["Uber"]["excel_path"], DATA_SOURCES["Uber"]["sheet_name"])
     except Exception as e:
-        st.error(f"读取 Uber 数据失败：{e}")
+        st.error(f"Failed to load Uber data: {e}")
         st.stop()
 
     try:
         df_ola = load_data(DATA_SOURCES["Ola"]["excel_path"], DATA_SOURCES["Ola"]["sheet_name"])
     except Exception as e:
-        st.error(f"读取 Ola 数据失败：{e}")
+        st.error(f"Failed to load Ola data: {e}")
         st.stop()
 
     # period 列表：取两者 union，并按 sortkey 排序
@@ -370,11 +375,11 @@ else:
     period_list = periods["period"].tolist()
 
     if not period_list:
-        st.error("Uber/Ola 数据中都没有可用的 period。")
+        st.error("No usable 'period' values found in Uber/Ola datasets.")
         st.stop()
 
     # 选择一个时间点
-    period_selected = st.sidebar.selectbox("选择时间 (period)", options=period_list, index=len(period_list) - 1)
+    period_selected = st.sidebar.selectbox("Select Period", options=period_list, index=len(period_list) - 1)
 
     # 维度列表：取两者 union
     d1 = df_uber[["dimension"]].dropna().drop_duplicates()
@@ -382,9 +387,13 @@ else:
     dims_all = pd.concat([d1, d2], ignore_index=True).drop_duplicates()["dimension"].tolist()
     dims_all = sorted(dims_all)
 
-    dims_selected = st.sidebar.multiselect("选择维度（默认全选）", options=dims_all, default=dims_all)
+    dims_selected = st.sidebar.multiselect("Select Dimensions (default: all)", options=dims_all, default=dims_all)
 
-    compare_layout = st.sidebar.radio("对比展示形式", ["按维度卡片（并排对比）", "表格（对比列）"], index=0)
+    compare_layout = st.sidebar.radio(
+        "Comparison Display",
+        ["Side-by-side Cards (by dimension)", "Table (side-by-side columns)"],
+        index=0
+    )
 
     # 过滤：固定 period
     uber_p = df_uber[df_uber["period"] == period_selected].copy()
@@ -414,16 +423,16 @@ else:
 
     # 顶部概览
     c1, c2, c3 = st.columns(3)
-    c1.metric("当前 period", period_selected)
-    c2.metric("展示维度数", len(dims_show))
-    c3.metric("关键词过滤", "ON" if keyword else "OFF")
+    c1.metric("Current period", period_selected)
+    c2.metric("Dimensions shown", len(dims_show))
+    c3.metric("Keyword filter", "ON" if keyword else "OFF")
     st.divider()
 
     if not dims_show:
-        st.info("该时间点在关键词过滤后没有可展示的维度。请调整关键词或时间。")
+        st.info("No dimensions to display after filtering. Try adjusting the keyword or period.")
         st.stop()
 
-    if compare_layout.startswith("表格"):
+    if compare_layout.startswith("Table"):
         # 表格对比：一行一个维度，Uber/Ola 各两列（summary/reco），可选 evidence
         rows = []
         for d in dims_show:
@@ -439,8 +448,16 @@ else:
                 "ola_recommendations": (o.get("ai_recommendations", "") if o is not None else ""),
             }
             if show_evidence:
-                row["uber_evidence"] = (u.get("negative_reviews_concat", "") if u is not None and "negative_reviews_concat" in u.index else "")
-                row["ola_evidence"] = (o.get("negative_reviews_concat", "") if o is not None and "negative_reviews_concat" in o.index else "")
+                row["uber_evidence"] = (
+                    u.get("negative_reviews_concat", "")
+                    if u is not None and "negative_reviews_concat" in u.index
+                    else ""
+                )
+                row["ola_evidence"] = (
+                    o.get("negative_reviews_concat", "")
+                    if o is not None and "negative_reviews_concat" in o.index
+                    else ""
+                )
             rows.append(row)
 
         out = pd.DataFrame(rows)
@@ -448,7 +465,7 @@ else:
 
     else:
         # 卡片对比：每个维度一张并排卡片
-        cols_per_row = st.sidebar.selectbox("卡片：每行维度数", [1, 2], index=0)
+        cols_per_row = st.sidebar.selectbox("Cards: dimensions per row", [1, 2], index=0)
 
         for i in range(0, len(dims_show), cols_per_row):
             cols = st.columns(cols_per_row)
